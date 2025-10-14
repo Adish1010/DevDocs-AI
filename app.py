@@ -1,7 +1,8 @@
 """
 DevDocs AI - Streamlit Frontend
 --------------------------------
-Professional UI for the Knowledge-Base Search Engine
+Professional UI for the Knowledge-Base Search Engine.
+Fixes the "two-click" issue by using explicit state management for errors.
 """
 
 import streamlit as st
@@ -99,7 +100,8 @@ def check_api_health() -> Dict[str, Any]:
 def upload_document(file, document_name: Optional[str] = None) -> Dict[str, Any]:
     """Upload document to API."""
     try:
-        files = {"file": (file.name, file, file.type)}
+        # Use file.getvalue() for the raw content, and file.name for filename/type
+        files = {"file": (file.name, file.getvalue(), file.type)}
         data = {}
         if document_name:
             data["document_name"] = document_name
@@ -114,7 +116,9 @@ def upload_document(file, document_name: Optional[str] = None) -> Dict[str, Any]
         if response.status_code == 201:
             return {"success": True, "data": response.json()}
         else:
-            return {"success": False, "error": response.json().get("error", "Upload failed")}
+            # Try to extract error message from response
+            error_detail = response.json().get("detail", response.text)
+            return {"success": False, "error": error_detail}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -135,7 +139,7 @@ def query_knowledge_base(question: str, filters: Optional[Dict] = None) -> Dict[
         if response.status_code == 200:
             return {"success": True, "data": response.json()}
         else:
-            return {"success": False, "error": response.json().get("error", "Query failed")}
+            return {"success": False, "error": response.json().get("detail", "Query failed")}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -145,6 +149,7 @@ def get_examples() -> List[str]:
     try:
         response = requests.get(f"{API_BASE_URL}/examples", timeout=5)
         if response.status_code == 200:
+            # Note: Checking for the correct key from API response
             return response.json().get("examples", [])
     except:
         pass
@@ -175,6 +180,40 @@ def format_confidence(confidence: float) -> str:
     else:
         return f'<span class="confidence-low">🔴 {confidence:.1%} (Low)</span>'
 
+# --- UPDATED CALLBACK FUNCTION FOR ROBUST STATE HANDLING ---
+def handle_query_search():
+    """Execute query and update session state immediately."""
+    query = st.session_state.query_input
+    filters = st.session_state.current_filters # Retrieve filters stored in state
+
+    # Reset result and error states at the start of the interaction
+    st.session_state.error_message = None
+    st.session_state.last_result = None 
+
+    if not query.strip():
+        # Set error message in state, which the main loop will display
+        st.session_state.error_message = "Please enter a question to search."
+        return
+
+    # Use a placeholder/spinner managed within the callback function
+    with st.spinner("🔍 Searching documentation..."):
+        result = query_knowledge_base(query, filters)
+    
+    if result["success"]:
+        data = result["data"]
+        st.session_state.last_result = data
+        st.session_state.query_history.insert(0, {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "question": query,
+            "confidence": data.get("confidence", 0),
+            "chunks_used": data.get("chunks_used", 0)
+        })
+        # Keep only last 20
+        st.session_state.query_history = st.session_state.query_history[:20]
+    else:
+        # Set API error message in state
+        st.session_state.error_message = f"❌ Query failed: {result['error']}"
+
 
 # ---------------------------------------------------------------------------
 # Session State Initialization
@@ -183,6 +222,12 @@ if "query_history" not in st.session_state:
     st.session_state.query_history = []
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
+# Initialize state for filters to be accessed by the callback
+if "current_filters" not in st.session_state:
+    st.session_state.current_filters = None
+# Initialize state for error messages
+if "error_message" not in st.session_state:
+    st.session_state.error_message = None
 
 
 # ---------------------------------------------------------------------------
@@ -220,34 +265,51 @@ def main():
         
         st.divider()
         
-        # Document Upload Section
+        # Document Upload Section (MODIFIED FOR MULTIPLE FILES)
         st.subheader("📁 Upload Documents")
-        uploaded_file = st.file_uploader(
-            "Choose a file",
+        uploaded_files = st.file_uploader(
+            "Choose files to upload",
             type=["pdf", "txt"],
-            help="Upload PDF or TXT documents"
+            accept_multiple_files=True, # Key change for multiple files
+            help="Upload one or more PDF or TXT documents"
         )
         
         custom_name = st.text_input(
-            "Custom Document Name (optional)",
-            placeholder="e.g., FastAPI Tutorial"
+            "Custom Document Name (Optional, applies to first file only)",
+            placeholder="e.g., FastAPI Tutorial v1"
         )
         
         if st.button("📤 Upload & Process", key="upload_btn"):
-            if uploaded_file:
-                with st.spinner("Processing document..."):
-                    result = upload_document(uploaded_file, custom_name or None)
+            if uploaded_files:
+                # Clear existing search results and errors upon starting a new upload process
+                st.session_state.last_result = None
+                st.session_state.error_message = None
+                
+                with st.spinner(f"Processing {len(uploaded_files)} documents..."):
+                    total_chunks = 0
                     
-                if result["success"]:
-                    data = result["data"]
-                    st.success(f"✅ **{data['document_name']}** processed!")
-                    st.info(f"📊 {data['chunks_processed']} chunks created in {data['processing_time_ms']:.0f}ms")
+                    for i, uploaded_file in enumerate(uploaded_files):
+                        # Use custom name for the first file, or the original name for the rest
+                        doc_name = custom_name if i == 0 and custom_name else uploaded_file.name
+                        
+                        # Call API for each file
+                        result = upload_document(uploaded_file, document_name=doc_name)
+                        
+                        if result["success"]:
+                            data = result["data"]
+                            total_chunks += data['chunks_processed']
+                            st.success(f"✅ **{data['document_name']}** processed! ({data['chunks_processed']} chunks)")
+                        else:
+                            st.error(f"❌ Upload failed for {uploaded_file.name}: {result['error']}")
+                    
+                    if total_chunks > 0:
+                         st.info(f"📊 Total of {total_chunks} chunks created.")
+                    
+                    # Refresh UI after processing all files
                     time.sleep(1)
                     st.rerun()
-                else:
-                    st.error(f"❌ Upload failed: {result['error']}")
             else:
-                st.warning("Please select a file first")
+                st.warning("Please select one or more files first")
         
         st.divider()
         
@@ -272,6 +334,9 @@ def main():
             if importance:
                 filters["importance"] = importance
         
+        # Store filters in state so they can be accessed by the callback function
+        st.session_state.current_filters = filters
+
         st.divider()
         
         # Statistics
@@ -297,50 +362,43 @@ def main():
         examples = get_examples()
         example_cols = st.columns(len(examples))
         
+        # Ensure correct key name is used when setting state for example buttons
         for idx, (col, example) in enumerate(zip(example_cols, examples)):
             with col:
                 if st.button(f"💡 {example[:30]}...", key=f"example_{idx}"):
                     st.session_state.query_input = example
         
         # Query input
-        query = st.text_area(
+        st.text_area(
             "Your Question:",
             height=100,
             placeholder="e.g., How do I create an async FastAPI endpoint with path parameters?",
-            key="query_input"
+            key="query_input" # Input uses session state key
         )
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            search_button = st.button("🚀 Search Knowledge Base", type="primary", use_container_width=True)
+            # --- MODIFIED BUTTON USES on_click CALLBACK ---
+            st.button(
+                "🚀 Search Knowledge Base", 
+                type="primary", 
+                use_container_width=True, 
+                on_click=handle_query_search
+            )
         with col2:
             clear_button = st.button("🗑️ Clear", use_container_width=True)
         
         if clear_button:
             st.session_state.query_input = ""
             st.session_state.last_result = None
+            st.session_state.error_message = None # Clear any pending error
             st.rerun()
         
-        # Process query
-        if search_button and query.strip():
-            with st.spinner("🔍 Searching documentation..."):
-                result = query_knowledge_base(query, filters)
-            
-            if result["success"]:
-                data = result["data"]
-                st.session_state.last_result = data
-                st.session_state.query_history.insert(0, {
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "question": query,
-                    "confidence": data.get("confidence", 0),
-                    "chunks_used": data.get("chunks_used", 0)
-                })
-                # Keep only last 20
-                st.session_state.query_history = st.session_state.query_history[:20]
-            else:
-                st.error(f"❌ Query failed: {result['error']}")
+        # --- DISPLAY ERROR IF PRESENT ---
+        if st.session_state.error_message:
+            st.error(st.session_state.error_message)
         
-        # Display results
+        # The main logic to display results now relies entirely on session state
         if st.session_state.last_result:
             st.divider()
             data = st.session_state.last_result
@@ -385,9 +443,8 @@ def main():
                 st.info("No sources available")
             
             # Copy button
-            if st.button("📋 Copy Answer to Clipboard"):
-                st.code(data.get("answer", ""), language="markdown")
-                st.success("✅ Answer displayed above for copying")
+            st.subheader("📋 Answer for Copying")
+            st.code(data.get("answer", ""), language="markdown")
     
     # -------------------------------------------------------------------------
     # Tab 2: History

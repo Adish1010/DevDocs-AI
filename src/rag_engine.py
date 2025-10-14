@@ -402,12 +402,23 @@ class RAGEngine:
             context_text = self._prepare_context(context_chunks)
             
             # Create prompt
-            user_message = f"""Question: {query}
+            user_message = f"""
+Using the provided documentation context, answer the user's question. Follow these strict rules:
+1. Identify the most relevant chunks to answer the question.
+2. Formulate a direct and concise answer based ONLY on the information in those chunks.
+3. Immediately after each piece of information or fact in your answer, add a citation in the format (Source [chunk_number]). The chunk_number corresponds to its position in the list below.
+4. If a piece of information is found in multiple chunks, cite all of them, e.g., (Source [1, 3]).
+5. If the documentation does not contain the answer, state "The provided documentation does not contain information on this topic." Do NOT hallucinate or infer an answer.
+6. When relevant and available, include code examples and cite their source.
+
+---
+Question: {query}
 
 Context from documentation:
 {context_text}
-
-Please provide a comprehensive answer based on the documentation above. Include code examples if relevant and cite the specific sources."""
+---
+Final Answer:
+"""
 
             # Generate answer
             start_time = time.time()
