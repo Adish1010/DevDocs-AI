@@ -1,253 +1,529 @@
 """
-Streamlit UI for Intelligent Programming Documentation Search Engine
----------------------------------------------------------------------
-Beautiful, interactive interface for demonstrating the system capabilities.
-Perfect for your demo video!
+DevDocs AI - Streamlit Frontend
+--------------------------------
+Professional UI for the Knowledge-Base Search Engine.
+Fixes the "two-click" issue by using explicit state management for errors.
 """
 
 import streamlit as st
 import requests
+import json
 import time
-import os
-from typing import List, Dict, Any
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 
-# Page configuration
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+API_BASE_URL = "http://localhost:8000"
+
+# Page config
 st.set_page_config(
-    page_title="DevDocs AI - Intelligent Programming Documentation Search",
-    page_icon="🧠",
+    page_title="DevDocs AI",
+    page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# API configuration
-API_BASE = "http://localhost:8000"
-
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
+        font-size: 3rem;
+        font-weight: bold;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .sub-header {
+        text-align: center;
+        color: #666;
+        font-size: 1.2rem;
         margin-bottom: 2rem;
     }
-    .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-    }
-    .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #d1ecf1;
-        border: 1px solid #bee5eb;
-        color: #0c5460;
-    }
-    .answer-box {
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem;
-        border-radius: 0.5rem;
-        background-color: #f8f9fa;
-        border-left: 4px solid #1f77b4;
-        margin: 1rem 0;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
     }
-    .confidence-high { color: #28a745; font-weight: bold; }
-    .confidence-medium { color: #ffc107; font-weight: bold; }
-    .confidence-low { color: #dc3545; font-weight: bold; }
+    .source-card {
+        background: #f8f9ff;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        margin-bottom: 1rem;
+    }
+    .confidence-high {
+        color: #22c55e;
+        font-weight: bold;
+    }
+    .confidence-medium {
+        color: #eab308;
+        font-weight: bold;
+    }
+    .confidence-low {
+        color: #ef4444;
+        font-weight: bold;
+    }
+    .stButton>button {
+        width: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem;
+        font-size: 1.1rem;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        opacity: 0.9;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def check_api_health() -> bool:
-    """Check if the API server is running."""
+# ---------------------------------------------------------------------------
+# Helper Functions
+# ---------------------------------------------------------------------------
+def check_api_health() -> Dict[str, Any]:
+    """Check if API is available."""
     try:
-        response = requests.get(f"{API_BASE}/health", timeout=5)
-        return response.status_code == 200
+        response = requests.get(f"{API_BASE_URL}/health", timeout=5)
+        return response.json() if response.status_code == 200 else {}
     except:
-        return False
+        return {}
 
-def get_example_queries() -> List[str]:
-    """Get example queries from API."""
+
+def upload_document(file, document_name: Optional[str] = None) -> Dict[str, Any]:
+    """Upload document to API."""
     try:
-        response = requests.get(f"{API_BASE}/examples")
-        return response.json().get("example_queries", [])
-    except:
-        return []
+        # Use file.getvalue() for the raw content, and file.name for filename/type
+        files = {"file": (file.name, file.getvalue(), file.type)}
+        data = {}
+        if document_name:
+            data["document_name"] = document_name
+        
+        response = requests.post(
+            f"{API_BASE_URL}/upload",
+            files=files,
+            data=data,
+            timeout=300
+        )
+        
+        if response.status_code == 201:
+            return {"success": True, "data": response.json()}
+        else:
+            # Try to extract error message from response
+            error_detail = response.json().get("detail", response.text)
+            return {"success": False, "error": error_detail}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-def upload_document(file, document_name: str = None) -> Dict[str, Any]:
-    """Upload document to the knowledge base."""
-    files = {"file": (file.name, file.getvalue(), file.type)}
-    data = {"document_name": document_name or file.name}
-    
-    response = requests.post(f"{API_BASE}/upload", files=files, data=data)
-    return response.json()
 
-def query_knowledge_base(question: str, filters: Dict = None) -> Dict[str, Any]:
+def query_knowledge_base(question: str, filters: Optional[Dict] = None) -> Dict[str, Any]:
     """Query the knowledge base."""
-    payload = {"question": question, "filters": filters}
-    response = requests.post(f"{API_BASE}/query", json=payload)
-    return response.json()
+    try:
+        payload = {"question": question}
+        if filters:
+            payload["filters"] = filters
+        
+        response = requests.post(
+            f"{API_BASE_URL}/query",
+            json=payload,
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        else:
+            return {"success": False, "error": response.json().get("detail", "Query failed")}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-def get_system_stats() -> Dict[str, Any]:
+
+def get_examples() -> List[str]:
+    """Get example queries."""
+    try:
+        response = requests.get(f"{API_BASE_URL}/examples", timeout=5)
+        if response.status_code == 200:
+            # Note: Checking for the correct key from API response
+            return response.json().get("examples", [])
+    except:
+        pass
+    return [
+        "How do I create a FastAPI endpoint?",
+        "What's the difference between async and sync functions?",
+        "Show me how to handle database connections"
+    ]
+
+
+def get_stats() -> Dict[str, Any]:
     """Get system statistics."""
-    response = requests.get(f"{API_BASE}/stats")
-    return response.json()
+    try:
+        response = requests.get(f"{API_BASE_URL}/stats", timeout=5)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return {}
 
-# Main application
+
+def format_confidence(confidence: float) -> str:
+    """Format confidence score with color."""
+    if confidence >= 0.7:
+        return f'<span class="confidence-high">🟢 {confidence:.1%} (High)</span>'
+    elif confidence >= 0.4:
+        return f'<span class="confidence-medium">🟡 {confidence:.1%} (Medium)</span>'
+    else:
+        return f'<span class="confidence-low">🔴 {confidence:.1%} (Low)</span>'
+
+# --- UPDATED CALLBACK FUNCTION FOR ROBUST STATE HANDLING ---
+def handle_query_search():
+    """Execute query and update session state immediately."""
+    query = st.session_state.query_input
+    filters = st.session_state.current_filters # Retrieve filters stored in state
+
+    # Reset result and error states at the start of the interaction
+    st.session_state.error_message = None
+    st.session_state.last_result = None 
+
+    if not query.strip():
+        # Set error message in state, which the main loop will display
+        st.session_state.error_message = "Please enter a question to search."
+        return
+
+    # Use a placeholder/spinner managed within the callback function
+    with st.spinner("🔍 Searching documentation..."):
+        result = query_knowledge_base(query, filters)
+    
+    if result["success"]:
+        data = result["data"]
+        st.session_state.last_result = data
+        st.session_state.query_history.insert(0, {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "question": query,
+            "confidence": data.get("confidence", 0),
+            "chunks_used": data.get("chunks_used", 0)
+        })
+        # Keep only last 20
+        st.session_state.query_history = st.session_state.query_history[:20]
+    else:
+        # Set API error message in state
+        st.session_state.error_message = f"❌ Query failed: {result['error']}"
+
+
+# ---------------------------------------------------------------------------
+# Session State Initialization
+# ---------------------------------------------------------------------------
+if "query_history" not in st.session_state:
+    st.session_state.query_history = []
+if "last_result" not in st.session_state:
+    st.session_state.last_result = None
+# Initialize state for filters to be accessed by the callback
+if "current_filters" not in st.session_state:
+    st.session_state.current_filters = None
+# Initialize state for error messages
+if "error_message" not in st.session_state:
+    st.session_state.error_message = None
+
+
+# ---------------------------------------------------------------------------
+# Main App
+# ---------------------------------------------------------------------------
 def main():
     # Header
-    st.markdown('<div class="main-header">🧠 Intelligent Programming Documentation Search Engine</div>', 
-                unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📚 DevDocs AI</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="sub-header">Intelligent Programming Documentation Search Engine</div>',
+        unsafe_allow_html=True
+    )
     
     # Check API health
-    if not check_api_health():
-        st.error("🚨 API server is not running! Please start the server with:")
-        st.code("uvicorn src.api:app --reload --host 0.0.0.0 --port 8000")
-        return
+    health = check_api_health()
+    
+    if not health:
+        st.error("🔴 **API Server is not running!**")
+        st.info("Please start the API server: `python src/api.py`")
+        st.stop()
     
     # Sidebar
     with st.sidebar:
-        st.header("📊 System Info")
+        st.title("⚙️ Control Panel")
         
-        try:
-            stats = get_system_stats()
-            st.metric("Documents in Knowledge Base", 
-                     stats.get("knowledge_base", {}).get("total_chunks", 0))
-            st.metric("System Version", stats.get("system", {}).get("version", "1.0.0"))
-        except:
-            st.info("System stats unavailable")
+        # API Status
+        st.subheader("📊 System Status")
+        if health.get("status") == "healthy":
+            st.success("🟢 API: Operational")
+        else:
+            st.warning("🟡 API: Degraded")
         
-        st.header("📁 Upload Documents")
-        uploaded_file = st.file_uploader(
-            "Choose a document", 
-            type=['pdf', 'txt'],
-            help="Upload programming documentation (PDF or text files)"
+        stats = health.get("collection_stats", {})
+        st.metric("Documents Indexed", stats.get("total_chunks", 0))
+        
+        st.divider()
+        
+        # Document Upload Section (MODIFIED FOR MULTIPLE FILES)
+        st.subheader("📁 Upload Documents")
+        uploaded_files = st.file_uploader(
+            "Choose files to upload",
+            type=["pdf", "txt"],
+            accept_multiple_files=True, # Key change for multiple files
+            help="Upload one or more PDF or TXT documents"
         )
         
-        if uploaded_file:
-            document_name = st.text_input("Document name (optional)", uploaded_file.name)
-            if st.button("Process Document", type="primary"):
-                with st.spinner("Processing document..."):
-                    try:
-                        result = upload_document(uploaded_file, document_name)
-                        st.success(f"✅ {result['message']}")
-                        st.info(f"Processed {result['chunks_processed']} chunks")
-                    except Exception as e:
-                        st.error(f"Upload failed: {str(e)}")
-    
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.header("💬 Ask Questions")
-        
-        # Example queries
-        example_queries = get_example_queries()
-        if example_queries:
-            st.write("**Try these examples:**")
-            for i, example in enumerate(example_queries[:3]):
-                if st.button(example, key=f"example_{i}", use_container_width=True):
-                    st.session_state.question = example
-        
-        # Question input
-        question = st.text_area(
-            "Ask about programming documentation:",
-            height=100,
-            placeholder="e.g., How do I create a FastAPI endpoint with path parameters?",
-            key="question"
+        custom_name = st.text_input(
+            "Custom Document Name (Optional, applies to first file only)",
+            placeholder="e.g., FastAPI Tutorial v1"
         )
         
-        # Query options
-        with st.expander("Advanced Options"):
-            filter_type = st.selectbox(
-                "Filter by content type:",
-                ["All", "API Documentation", "Code Examples", "Setup Guides"]
+        if st.button("📤 Upload & Process", key="upload_btn"):
+            if uploaded_files:
+                # Clear existing search results and errors upon starting a new upload process
+                st.session_state.last_result = None
+                st.session_state.error_message = None
+                
+                with st.spinner(f"Processing {len(uploaded_files)} documents..."):
+                    total_chunks = 0
+                    
+                    for i, uploaded_file in enumerate(uploaded_files):
+                        # Use custom name for the first file, or the original name for the rest
+                        doc_name = custom_name if i == 0 and custom_name else uploaded_file.name
+                        
+                        # Call API for each file
+                        result = upload_document(uploaded_file, document_name=doc_name)
+                        
+                        if result["success"]:
+                            data = result["data"]
+                            total_chunks += data['chunks_processed']
+                            st.success(f"✅ **{data['document_name']}** processed! ({data['chunks_processed']} chunks)")
+                        else:
+                            st.error(f"❌ Upload failed for {uploaded_file.name}: {result['error']}")
+                    
+                    if total_chunks > 0:
+                         st.info(f"📊 Total of {total_chunks} chunks created.")
+                    
+                    # Refresh UI after processing all files
+                    time.sleep(1)
+                    st.rerun()
+            else:
+                st.warning("Please select one or more files first")
+        
+        st.divider()
+        
+        # Query Filters
+        st.subheader("🔍 Query Filters")
+        use_filters = st.checkbox("Enable Filters", value=False)
+        
+        filters = None
+        if use_filters:
+            content_type = st.selectbox(
+                "Content Type",
+                ["", "api_documentation", "code_example", "setup_guide", "general_documentation"]
+            )
+            importance = st.selectbox(
+                "Importance",
+                ["", "high", "medium"]
             )
             
-            filters = None
-            if filter_type == "API Documentation":
-                filters = {"content_type": "api_documentation"}
-            elif filter_type == "Code Examples":
-                filters = {"content_type": "code_example"}
-            elif filter_type == "Setup Guides":
-                filters = {"content_type": "setup_guide"}
+            filters = {}
+            if content_type:
+                filters["content_type"] = content_type
+            if importance:
+                filters["importance"] = importance
         
-        # Query button
-        if st.button("Get Answer", type="primary", use_container_width=True):
-            if question.strip():
-                with st.spinner("🔍 Searching documentation..."):
-                    try:
-                        start_time = time.time()
-                        result = query_knowledge_base(question, filters)
-                        processing_time = time.time() - start_time
-                        
-                        # Display results
-                        st.markdown("---")
-                        st.subheader("💡 Answer")
-                        
-                        # Confidence indicator
-                        confidence = result.get("confidence", 0)
-                        if confidence > 0.7:
-                            confidence_class = "confidence-high"
-                        elif confidence > 0.4:
-                            confidence_class = "confidence-medium"
-                        else:
-                            confidence_class = "confidence-low"
-                        
-                        st.markdown(f'<div class="answer-box">{result["answer"]}</div>', 
-                                   unsafe_allow_html=True)
-                        
-                        # Metadata
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Confidence", f"{confidence:.1%}")
-                        with col2:
-                            st.metric("Sources Used", len(result.get("sources", [])))
-                        with col3:
-                            st.metric("Processing Time", f"{result.get('processing_time', 0):.2f}s")
-                        
-                        # Sources
-                        if result.get("sources"):
-                            with st.expander("📚 Source Documents"):
-                                for source in result["sources"]:
-                                    st.write(f"• {source}")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Error processing question: {str(e)}")
-            else:
-                st.warning("Please enter a question")
+        # Store filters in state so they can be accessed by the callback function
+        st.session_state.current_filters = filters
+
+        st.divider()
+        
+        # Statistics
+        if st.button("📊 Refresh Stats"):
+            st.rerun()
+        
+        system_stats = get_stats()
+        if system_stats:
+            kb_stats = system_stats.get("knowledge_base", {})
+            with st.expander("📈 Detailed Stats", expanded=False):
+                st.json(kb_stats)
     
-    with col2:
-        st.header("🎯 Quick Actions")
+    # Main Content Area
+    tab1, tab2, tab3 = st.tabs(["🔍 Search", "📜 History", "ℹ️ About"])
+    
+    # -------------------------------------------------------------------------
+    # Tab 1: Search
+    # -------------------------------------------------------------------------
+    with tab1:
+        st.subheader("Ask Your Question")
         
-        if st.button("🔄 Refresh Knowledge Base", use_container_width=True):
-            try:
-                stats = get_system_stats()
-                st.success("Knowledge Base refreshed!")
-                st.info(f"Total chunks: {stats.get('knowledge_base', {}).get('total_chunks', 0)}")
-            except:
-                st.error("Failed to refresh")
+        # Example queries
+        examples = get_examples()
+        example_cols = st.columns(len(examples))
         
-        if st.button("📋 View All Examples", use_container_width=True):
-            try:
-                examples = get_example_queries()
-                st.write("**Example Queries:**")
-                for example in examples:
-                    st.write(f"• {example}")
-            except:
-                st.error("Failed to load examples")
+        # Ensure correct key name is used when setting state for example buttons
+        for idx, (col, example) in enumerate(zip(example_cols, examples)):
+            with col:
+                if st.button(f"💡 {example[:30]}...", key=f"example_{idx}"):
+                    st.session_state.query_input = example
         
-        st.header("ℹ️ About")
-        st.info("""
-        This Intelligent Programming Documentation Search Engine:
+        # Query input
+        st.text_area(
+            "Your Question:",
+            height=100,
+            placeholder="e.g., How do I create an async FastAPI endpoint with path parameters?",
+            key="query_input" # Input uses session state key
+        )
         
-        • **Searches** across your technical documentation
-        • **Understands** programming concepts and code
-        • **Provides** accurate, cited answers
-        • **Supports** PDF and text files
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            # --- MODIFIED BUTTON USES on_click CALLBACK ---
+            st.button(
+                "🚀 Search Knowledge Base", 
+                type="primary", 
+                use_container_width=True, 
+                on_click=handle_query_search
+            )
+        with col2:
+            clear_button = st.button("🗑️ Clear", use_container_width=True)
         
-        Perfect for API docs, codebases, and technical manuals!
+        if clear_button:
+            st.session_state.query_input = ""
+            st.session_state.last_result = None
+            st.session_state.error_message = None # Clear any pending error
+            st.rerun()
+        
+        # --- DISPLAY ERROR IF PRESENT ---
+        if st.session_state.error_message:
+            st.error(st.session_state.error_message)
+        
+        # The main logic to display results now relies entirely on session state
+        if st.session_state.last_result:
+            st.divider()
+            data = st.session_state.last_result
+            
+            # Metrics row
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("⏱️ Response Time", f"{data.get('processing_time_ms', 0):.0f}ms")
+            with col2:
+                st.metric("📊 Chunks Used", data.get("chunks_used", 0))
+            with col3:
+                confidence = data.get("confidence", 0)
+                st.markdown(f"**🎯 Confidence**")
+                st.markdown(format_confidence(confidence), unsafe_allow_html=True)
+            with col4:
+                st.metric("📚 Sources", len(data.get("sources", [])))
+            
+            st.divider()
+            
+            # Answer
+            st.subheader("✨ Answer")
+            st.markdown(data.get("answer", "No answer provided"))
+            
+            # Sources
+            st.divider()
+            st.subheader("📚 Sources")
+            
+            sources = data.get("sources", [])
+            if sources:
+                for idx, source in enumerate(sources, 1):
+                    with st.container():
+                        st.markdown(f"""
+                        <div class="source-card">
+                            <strong>📄 Source {idx}: {source.get('document', 'Unknown')}</strong><br>
+                            <small>
+                                Type: {source.get('content_type', 'unknown')} | 
+                                Has Code: {'✅ Yes' if source.get('has_code') else '❌ No'}
+                            </small>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.info("No sources available")
+            
+            # Copy button
+            st.subheader("📋 Answer for Copying")
+            st.code(data.get("answer", ""), language="markdown")
+    
+    # -------------------------------------------------------------------------
+    # Tab 2: History
+    # -------------------------------------------------------------------------
+    with tab2:
+        st.subheader("📜 Query History")
+        
+        if st.session_state.query_history:
+            for idx, entry in enumerate(st.session_state.query_history):
+                with st.expander(
+                    f"🕐 {entry['timestamp']} - {entry['question'][:60]}...",
+                    expanded=(idx == 0)
+                ):
+                    st.write(f"**Question:** {entry['question']}")
+                    st.write(f"**Confidence:** {entry['confidence']:.1%}")
+                    st.write(f"**Chunks Used:** {entry['chunks_used']}")
+        else:
+            st.info("No query history yet. Start searching!")
+        
+        if st.session_state.query_history:
+            if st.button("🗑️ Clear History"):
+                st.session_state.query_history = []
+                st.rerun()
+    
+    # -------------------------------------------------------------------------
+    # Tab 3: About
+    # -------------------------------------------------------------------------
+    with tab3:
+        st.subheader("ℹ️ About DevDocs AI")
+        
+        st.markdown("""
+        ### 🎯 What is DevDocs AI?
+        
+        DevDocs AI is an intelligent programming documentation search engine that uses:
+        - **Semantic Search**: Find information by meaning, not just keywords
+        - **RAG (Retrieval-Augmented Generation)**: Combines search with AI generation
+        - **Metadata-Based Re-ranking**: Smart boosting based on content type and importance
+        
+        ### 🚀 Key Features
+        
+        - 📄 **Multi-format Support**: PDF and TXT documents
+        - 🔍 **Smart Search**: Understanding context and intent
+        - 🎯 **Confidence Scoring**: Know how reliable answers are
+        - 📚 **Source Attribution**: Always cites where information comes from
+        - ⚡ **Fast Responses**: Optimized for speed
+        
+        ### 🛠️ Technology Stack
+        
+        - **Backend**: FastAPI + Python
+        - **Frontend**: Streamlit
+        - **Embeddings**: Sentence Transformers (all-MiniLM-L6-v2)
+        - **Vector DB**: ChromaDB
+        - **LLM**: Groq (Llama 3.1)
+        - **Document Processing**: LangChain
+        
+        ### 📊 Current System Stats
+        """)
+        
+        system_stats = get_stats()
+        if system_stats:
+            st.json(system_stats)
+        
+        st.markdown("""
+        ### 👨‍💻 Usage Tips
+        
+        1. **Upload Documents**: Start by uploading programming documentation
+        2. **Ask Natural Questions**: Write questions as you would ask a colleague
+        3. **Use Filters**: Narrow down to specific content types
+        4. **Check Confidence**: Higher confidence = more reliable answer
+        5. **Verify Sources**: Always check the cited sources
+        
+        ---
+        
+        **Version**: 1.0.0 | **Built with** ❤️ **for developers**
         """)
 
+
+# ---------------------------------------------------------------------------
+# Run App
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
