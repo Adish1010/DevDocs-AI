@@ -1,5 +1,7 @@
 # DevDocs AI
 
+**Knowledge Base Search Engine**
+
 **Intelligent search engine for programming documentation that actually understands context.**
 
 [![Demo Video](https://img.shields.io/badge/▶️-Watch%20Demo-red)](link-to-your-video) 
@@ -166,7 +168,7 @@ The LLM only uses retrieved context - no hallucinations. If it doesn't know, it 
 <details>
 <summary>📸 Query Results with Metadata</summary>
 
-![Query Results](screenshots/query_result.png)
+![Query Results](screenshots/query_results.png)
 </details>
 
 <details>
