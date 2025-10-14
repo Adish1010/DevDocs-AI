@@ -4,7 +4,7 @@
 
 **Intelligent search engine for programming documentation that actually understands context.**
 
-[![Demo Video](https://img.shields.io/badge/▶️-Watch%20Demo-red)](link-to-your-video) 
+[![Demo Video](https://img.shields.io/badge/▶️-Watch%20Demo-red)](https://drive.google.com/file/d/1QPj6KEPBpBVmQQOgGE2h05HTXMM2fQwC/view?usp=drive_link) 
 
 > 🎯 **What makes this different:** Metadata-based re-ranking that boosts relevant results by 15%. When you ask for code examples, it prioritizes chunks containing actual code. Ask about APIs, and API documentation ranks higher.
 
@@ -155,7 +155,7 @@ The LLM only uses retrieved context - no hallucinations. If it doesn't know, it 
 
 ## 🎬 Demo
 
-**Video:** [5-minute walkthrough](link-to-video)
+**Video:** [5-minute walkthrough](https://drive.google.com/file/d/1QPj6KEPBpBVmQQOgGE2h05HTXMM2fQwC/view?usp=drive_link)
 
 **Screenshots:**
 
