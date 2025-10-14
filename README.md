@@ -168,7 +168,7 @@ The LLM only uses retrieved context - no hallucinations. If it doesn't know, it 
 <details>
 <summary>📸 Query Results with Metadata</summary>
 
-![Query Results](screenshots/query_result.png)
+![Query Results](screenshots/query_results.png)
 </details>
 
 <details>
