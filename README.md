@@ -1,6 +1,7 @@
 # DevDocs AI
 
 **Knowledge Base Search Engine**
+
 **Intelligent search engine for programming documentation that actually understands context.**
 
 [![Demo Video](https://img.shields.io/badge/▶️-Watch%20Demo-red)](link-to-your-video) 
