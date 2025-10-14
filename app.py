@@ -2,7 +2,6 @@
 DevDocs AI - Streamlit Frontend
 --------------------------------
 Professional UI for the Knowledge-Base Search Engine.
-Fixes the "two-click" issue by using explicit state management for errors.
 """
 
 import streamlit as st
@@ -261,7 +260,7 @@ def main():
             st.warning("🟡 API: Degraded")
         
         stats = health.get("collection_stats", {})
-        st.metric("Documents Indexed", stats.get("total_chunks", 0))
+        st.metric("Chunks Indexed", stats.get("total_chunks", 0))
         
         st.divider()
         

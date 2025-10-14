@@ -235,7 +235,7 @@ for chunk in top_10_chunks:
 
 ## 📈 Performance
 
-**Laptop specs:** 16GB RAM, i5 processor
+**Laptop specs:** 8GB RAM, i5 processor
 
 - Document processing: ~2-3 sec per PDF
 - Query latency: 1.5-2.5 sec (avg 2.0s)
